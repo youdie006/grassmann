@@ -32,7 +32,7 @@ def load_results(result_paths):
     return rows
 
 
-def plot_loss_curves(rows, out_path: Path):
+def plot_loss_curves(rows, out_path: Path, run_tag: str):
     plt.figure(figsize=(8, 5))
     for row in rows:
         epochs = np.arange(1, len(row["train_losses"]) + 1)
@@ -43,7 +43,7 @@ def plot_loss_curves(rows, out_path: Path):
             linewidth=2.0,
             label=f'{row["name"]} (val)',
         )
-    plt.title("Validation Loss by Epoch (Hydra Run 2026-02-23 02-26-47)")
+    plt.title(f"Validation Loss by Epoch ({run_tag})")
     plt.xlabel("Epoch")
     plt.ylabel("Cross-Entropy Loss")
     plt.xticks(epochs)
@@ -55,7 +55,7 @@ def plot_loss_curves(rows, out_path: Path):
     plt.close()
 
 
-def plot_best_metrics(rows, out_path: Path):
+def plot_best_metrics(rows, out_path: Path, run_tag: str):
     names = [row["name"] for row in rows]
     best_losses = [row["best_val_loss"] for row in rows]
     best_ppls = [row["best_val_ppl"] for row in rows]
@@ -91,7 +91,7 @@ def plot_best_metrics(rows, out_path: Path):
             fontsize=9,
         )
 
-    fig.suptitle("Best Metric Comparison (Hydra Run 2026-02-23 02-26-47)")
+    fig.suptitle(f"Best Metric Comparison ({run_tag})")
     fig.tight_layout()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     fig.savefig(out_path, dpi=220)
@@ -106,17 +106,23 @@ def main():
         default="training_results_hydra/figures",
         help="Directory to save generated figures",
     )
+    parser.add_argument(
+        "--tag",
+        default="run",
+        help="Tag used in output filenames and plot titles (e.g. 2026-02-23_03-09-29)",
+    )
     args = parser.parse_args()
 
     rows = load_results(args.results)
     rows = sorted(rows, key=lambda x: x["strategy"])
     out_dir = Path(args.out_dir)
 
-    loss_path = out_dir / "run_2026-02-23_02-26-47_val_loss_curve.png"
-    metric_path = out_dir / "run_2026-02-23_02-26-47_best_metrics.png"
+    tag = args.tag
+    loss_path = out_dir / f"{tag}_val_loss_curve.png"
+    metric_path = out_dir / f"{tag}_best_metrics.png"
 
-    plot_loss_curves(rows, loss_path)
-    plot_best_metrics(rows, metric_path)
+    plot_loss_curves(rows, loss_path, tag)
+    plot_best_metrics(rows, metric_path, tag)
 
     print(f"saved: {loss_path}")
     print(f"saved: {metric_path}")
