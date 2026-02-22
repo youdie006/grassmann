@@ -1,0 +1,85 @@
+{
+  "run_dir": "/mnt/d/MyProject/AINWYN/analysis/repos/kanenorman-grassmann/training_results_hydra/multirun/2026-02-23/02-26-47/1_grassmann",
+  "experiment_name": "paper_6l_128",
+  "strategy": "grassmann",
+  "num_params": 12607168,
+  "best_val_loss": 23.538960320608957,
+  "best_val_ppl": 16704772944.741259,
+  "train_losses": [
+    44.301396079685375,
+    30.414261610611625,
+    27.937671993089758
+  ],
+  "val_losses": [
+    27.66147313799177,
+    23.879853112357004,
+    23.538960320608957
+  ],
+  "config": {
+    "model": {
+      "tensor_lifting_strategy": "grassmann",
+      "num_layers": 6,
+      "d_model": 256,
+      "num_heads": 4,
+      "expansion_ratio": 4,
+      "d_low": 32,
+      "lags": [
+        1,
+        2,
+        4,
+        8,
+        12,
+        16
+      ],
+      "pre_norm": false,
+      "weight_tying": true
+    },
+    "data": {
+      "source": "local_parquet",
+      "data_root": "/mnt/d/MyProject/AINWYN/analysis/repos/kanenorman-grassmann/../../data/wikitext2_official/wikitext-2-raw-v1",
+      "tokenizer_name": "bert-base-uncased",
+      "max_context_len": 128,
+      "max_samples_train": 800,
+      "max_samples_val": 200
+    },
+    "seed": 42,
+    "train": {
+      "device": "auto",
+      "batch_size": 16,
+      "num_epochs": 3,
+      "learning_rate": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "dropout_rate": 0.1,
+      "num_workers": 0,
+      "pin_memory": true,
+      "amp": true
+    },
+    "experiment": {
+      "name": "paper_6l_128",
+      "run_id": null,
+      "output_root": "training_results_hydra"
+    }
+  },
+  "lm_config": {
+    "vocab_size": 30522,
+    "max_context_len": 128,
+    "num_layers": 6,
+    "tensor_lifting_strategy": "grassmann",
+    "lags": [
+      1,
+      2,
+      4,
+      8,
+      12,
+      16
+    ],
+    "d_model": 256,
+    "num_heads": 4,
+    "expansion_ratio": 4,
+    "dropout_rate": 0.1,
+    "weight_tying": true,
+    "d_low": 32,
+    "pre_norm": false
+  }
+}

@@ -1,0 +1,23 @@
+# Python-generated files
+__pycache__/
+*.py[oc]
+build/
+dist/
+wheels/
+*.egg-info
+
+# Virtual environments
+.venv
+
+training_results/*
+training_results_hydra/single/
+training_results_hydra/**/best.pt
+/best.pt
+/results.json
+
+# IDEs
+.idea/*
+.vscode/*
+
+#Mac
+.DStore

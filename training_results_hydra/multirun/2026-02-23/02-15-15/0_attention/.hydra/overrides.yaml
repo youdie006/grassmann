@@ -1,0 +1,2 @@
+- model=attention
+- train.num_epochs=1

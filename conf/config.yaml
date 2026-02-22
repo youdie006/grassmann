@@ -1,0 +1,30 @@
+defaults:
+  - model: attention
+  - data: wikitext2_local
+  - _self_
+
+seed: 42
+
+train:
+  device: auto
+  batch_size: 32
+  num_epochs: 30
+  learning_rate: 0.001
+  weight_decay: 0.01
+  grad_clip: 1.0
+  dropout_rate: 0.1
+  num_workers: 2
+  pin_memory: true
+  amp: true
+
+experiment:
+  name: paper_6l_128
+  run_id: null
+  output_root: training_results_hydra
+
+hydra:
+  run:
+    dir: ${experiment.output_root}/single/${now:%Y-%m-%d}/${now:%H-%M-%S}_${model.tensor_lifting_strategy}
+  sweep:
+    dir: ${experiment.output_root}/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}_${model.tensor_lifting_strategy}

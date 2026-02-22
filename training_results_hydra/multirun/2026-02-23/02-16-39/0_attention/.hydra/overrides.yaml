@@ -1,0 +1,6 @@
+- model=attention
+- train.num_epochs=2
+- train.num_workers=0
+- train.batch_size=16
+- data.max_samples_train=12000
+- data.max_samples_val=3000

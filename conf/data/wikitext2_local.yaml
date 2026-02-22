@@ -1,0 +1,6 @@
+source: local_parquet
+data_root: ${hydra:runtime.cwd}/../../data/wikitext2_official/wikitext-2-raw-v1
+tokenizer_name: bert-base-uncased
+max_context_len: 128
+max_samples_train: null
+max_samples_val: null

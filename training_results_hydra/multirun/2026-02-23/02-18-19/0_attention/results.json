@@ -1,0 +1,59 @@
+{
+  "run_dir": "training_results_hydra/multirun/2026-02-23/02-18-19/0_attention",
+  "experiment_name": "paper_6l_128",
+  "strategy": "attention",
+  "num_params": 12585472,
+  "best_val_loss": 23.8336,
+  "best_val_ppl": 22428927000.23,
+  "train_losses": [
+    45.1583,
+    28.4942,
+    25.5039
+  ],
+  "val_losses": [
+    28.6362,
+    24.4806,
+    23.8336
+  ],
+  "config": {
+    "seed": 42,
+    "train": {
+      "device": "cpu",
+      "batch_size": 16,
+      "num_epochs": 3,
+      "learning_rate": 0.001,
+      "weight_decay": 0.01,
+      "grad_clip": 1.0,
+      "dropout_rate": 0.1,
+      "num_workers": 0,
+      "pin_memory": true,
+      "amp": true
+    },
+    "data": {
+      "source": "local_parquet",
+      "data_root": "analysis/data/wikitext2_official/wikitext-2-raw-v1",
+      "tokenizer_name": "bert-base-uncased",
+      "max_context_len": 128,
+      "max_samples_train": 800,
+      "max_samples_val": 200
+    },
+    "model": {
+      "tensor_lifting_strategy": "attention",
+      "num_layers": 6,
+      "d_model": 256,
+      "num_heads": 4,
+      "expansion_ratio": 4,
+      "d_low": 32,
+      "lags": [
+        1,
+        2,
+        4,
+        8,
+        12,
+        16
+      ],
+      "pre_norm": false,
+      "weight_tying": true
+    }
+  }
+}

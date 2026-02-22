@@ -1,0 +1,2 @@
+- model=grassmann
+- train.num_epochs=1

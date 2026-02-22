@@ -1,0 +1,9 @@
+tensor_lifting_strategy: attention
+num_layers: 6
+d_model: 256
+num_heads: 4
+expansion_ratio: 4
+d_low: 32
+lags: [1, 2, 4, 8, 12, 16]
+pre_norm: false
+weight_tying: true
