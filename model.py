@@ -19,6 +19,7 @@ class LMConfig:
     weight_tying: bool
     d_low: int
     pre_norm: bool = False
+    layerwise_lags: bool = False
 
 
 class MultiHeadAttention(nn.Module):
@@ -89,13 +90,16 @@ class GrassmannMixing(nn.Module):
         counts = torch.zeros(b, n, 1, device=x.device, dtype=x.dtype)
 
         for lag in self.lags:
-            if lag <= 0 or lag >= n: continue
+            if lag <= 0 or lag >= n:
+                continue
 
-            z_curr = z[:, lag:, :]
+            # Strict causal variant for autoregressive LM:
+            # pair position t with t-lag only (no future-token leakage).
+            z_t = z[:, lag:, :]
             z_past = z[:, :-lag, :]
 
-            z_i = z_curr[:, :, self.idx_i]
-            z_j = z_curr[:, :, self.idx_j]
+            z_i = z_t[:, :, self.idx_i]
+            z_j = z_t[:, :, self.idx_j]
             zp_i = z_past[:, :, self.idx_i]
             zp_j = z_past[:, :, self.idx_j]
 
@@ -135,15 +139,16 @@ class FeedForward(nn.Module):
 
 
 class TransformerBlock(nn.Module):
-    def __init__(self, config: LMConfig) -> None:
+    def __init__(self, config: LMConfig, lags=None) -> None:
         super().__init__()
         self.pre_norm = config.pre_norm
         self.tensor_lifting_strategy = config.tensor_lifting_strategy
         self.attention_norm = nn.LayerNorm(config.d_model)
+        active_lags = list(config.lags if lags is None else lags)
 
         if self.tensor_lifting_strategy == "grassmann":
             self.attention = GrassmannMixing(
-                config.d_model, d_low=config.d_low, lags=config.lags
+                config.d_model, d_low=config.d_low, lags=active_lags
             )
         elif self.tensor_lifting_strategy == "attention":
             self.attention = MultiHeadAttention(
@@ -162,9 +167,10 @@ class TransformerBlock(nn.Module):
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         if self.pre_norm:
             if self.tensor_lifting_strategy == "grassmann":
-                # Optional pre-norm variant for ablations:
-                # normalize input -> mix -> dropout, without an extra residual
-                x = self.dropout(self.attention(self.attention_norm(x)))
+                # Pre-norm residual path for stable deep training.
+                mix_out = self.attention(self.attention_norm(x))
+                mix_out = self.dropout(mix_out)
+                x = x + mix_out
             else:
                 attn_out = self.attention(self.attention_norm(x))
                 attn_out = self.dropout(attn_out)
@@ -200,11 +206,14 @@ class Transformer(nn.Module):
         self.token_embedding = nn.Embedding(config.vocab_size, config.d_model)
         self.position_embedding = nn.Embedding(config.max_context_len, config.d_model)
         self.embedding_dropout = nn.Dropout(config.dropout_rate)
-        self.transformer_blocks = nn.Sequential(
-            *[TransformerBlock(config) for _ in range(config.num_layers)]
-        )
+        self.transformer_blocks = nn.ModuleList()
+        for layer_lags in self._resolve_layer_lags(config):
+            self.transformer_blocks.append(TransformerBlock(config, lags=layer_lags))
         self.output_norm = nn.LayerNorm(config.d_model)
         self.lm_head = nn.Linear(config.d_model, config.vocab_size, bias=False)
+
+        # Use GPT-style small-std initialization for stable deep LM training.
+        self.apply(self._init_weights)
 
         if config.weight_tying:
             self.lm_head.weight = self.token_embedding.weight
@@ -218,8 +227,33 @@ class Transformer(nn.Module):
 
         hidden_states = token_embeds + position_embeds
         hidden_states = self.embedding_dropout(hidden_states)
-        hidden_states = self.transformer_blocks(hidden_states)
+        for block in self.transformer_blocks:
+            hidden_states = block(hidden_states)
         hidden_states = self.output_norm(hidden_states)
         logits = self.lm_head(hidden_states)
 
         return logits
+
+    @staticmethod
+    def _resolve_layer_lags(config: LMConfig):
+        if config.tensor_lifting_strategy != "grassmann":
+            return [list(config.lags) for _ in range(config.num_layers)]
+
+        base_lags = [int(lag) for lag in config.lags]
+        if not config.layerwise_lags:
+            return [base_lags for _ in range(config.num_layers)]
+
+        if len(base_lags) != config.num_layers:
+            raise ValueError(
+                "When layerwise_lags=true, model.lags must have exactly num_layers values."
+            )
+        return [[lag] for lag in base_lags]
+
+    @staticmethod
+    def _init_weights(module: nn.Module):
+        if isinstance(module, nn.Linear):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)
+            if module.bias is not None:
+                nn.init.zeros_(module.bias)
+        elif isinstance(module, nn.Embedding):
+            nn.init.normal_(module.weight, mean=0.0, std=0.02)

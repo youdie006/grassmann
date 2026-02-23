@@ -1,0 +1,14 @@
+- model=attention
+- model.num_layers=12
+- model.pre_norm=True
+- data.max_context_len=256
+- train.device=cuda
+- train.batch_size=16
+- model.layerwise_lags=True
+- model.lags=[1,1,2,2,4,4,8,8,12,12,16,16]
+- train.num_epochs=30
+- train.learning_rate=0.001
+- train.num_workers=0
+- data.data_root=/tmp/wikitext2_official/wikitext-2-raw-v1
+- data.max_samples_train=null
+- data.max_samples_val=null

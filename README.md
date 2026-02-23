@@ -1,98 +1,105 @@
-# Grassmann Flows vs Transformer (Paper Reproduction)
+# Grassmann Flows vs Transformer (Paper-Style Reproduction)
 
-This repository reproduces and tests the ideas from:
+This project reproduces and stress-tests the language modeling setup from:
 
-**Attention Is Not What You Need: Grassmann Flows as an Attention-Free Alternative for Sequence Modeling**  
-arXiv: `2512.19428`
+**Attention Is Not What You Need: Grassmann Flows as an Attention-Free Alternative for Sequence Modeling** (arXiv: `2512.19428`)
 
-The goal is simple: implement the paper-aligned Grassmann block, run the same training setup as the 6-layer / context-128 setting, and compare directly against a size-matched Transformer baseline.
+The goal is to implement the Grassmann block at code level, run matched experiments against a Transformer baseline, and report results with transparent training curves and interpretation.
 
 ## Why This Project
 
-Attention is powerful, but expensive.  
-The paper proposes an attention-free sequence mixing approach based on Grassmann flows.  
-This project evaluates whether that approach works in practice under controlled, matched conditions.
+The paper claims that an attention-free Grassmann mixer can stay competitive with Transformer self-attention on WikiText-2.
+This repository exists to verify that claim under controlled, reproducible conditions and understand where behavior diverges.
 
 ## What Was Implemented
 
-- Paper-aligned Grassmann gate mixing:
+- Decoder-only LM backbone with matched dimensions for both mixers.
+- Paper-style Grassmann gate mixing:
   - `h_mix = alpha * h + (1 - alpha) * g`
-  - `alpha = sigmoid(W_gate[h; g] + b_gate)`
-- Paper-aligned post-norm flow for the Grassmann block.
-- Baseline Transformer and Grassmann models with matched core dimensions.
-- UV + Hydra experiment pipeline for reproducible multirun comparisons.
-- Official local WikiText-2 parquet loading (`wikitext-2-raw-v1`).
+  - `alpha = sigmoid(W_gate [h; g] + b_gate)`
+- Layerwise lag schedule support for 12-layer depth pattern:
+  - `(1,1,2,2,4,4,8,8,12,12,16,16)`
+- Causal Grassmann pairing (`t` with `t-lag`) to avoid future-token leakage.
+- Training stability fixes used in final run:
+  - small-std LM initialization (`N(0, 0.02)` for Linear/Embedding)
+  - pre-norm training (`model.pre_norm=true`)
+  - pre-norm residual path for Grassmann mixing
+  - AMP scheduler-step guard (step only after real optimizer step)
+- Hydra-based experiment management with fully logged `results.json` outputs.
 
-## Experiment Configuration (Final Run)
+## Final Reproduction Run (Table-2 Style)
 
-- Run tag: `2026-02-23_03-09-29`
-- Models: `attention`, `grassmann`
-- Dataset: full WikiText-2 (`Salesforce/wikitext`, `wikitext-2-raw-v1`)
-- Sequence length: `128`
-- Layers: `6`
-- Batch size: `32`
+- Run tag: `2026-02-23/14-13-53`
+- Dataset: WikiText-2 raw (`wikitext-2-raw-v1`)
+- Tokenizer: `bert-base-uncased` (`~30,522` vocab)
+- Block size: `256`
+- Layers: `12`
+- Model dim / FFN dim: `256 / 1024`
+- Heads: `4`
+- Batch size: `16`
 - Epochs: `30`
-- Lags: `{1,2,4,8,12,16}`
-- Device: CUDA (`RTX 3060 Ti`)
-- DataLoader workers: `2`
+- Learning rate: `1e-3` (AdamW + cosine)
+- Device: CUDA
 
-Command used:
+## Results
 
-```bash
-PYTHONUNBUFFERED=1 UV_CACHE_DIR=/tmp/uv-cache UV_PYTHON_INSTALL_DIR=/tmp/uv-python \
-uv run --python /home/xncb135/miniconda3/bin/python3 \
-python -u train_hydra.py -m model=attention,grassmann \
-  train.num_epochs=30 \
-  train.batch_size=32 \
-  train.num_workers=2 \
-  data.max_samples_train=null \
-  data.max_samples_val=null
-```
-
-## Final Results (Run: 2026-02-23_03-09-29)
+### Direct model comparison (best validation over 30 epochs)
 
 | Model | Params (M) | Best Val Loss | Best Val PPL |
 |---|---:|---:|---:|
-| TransformerLM | 12.59 | 5.4753 | 238.71 |
-| GrassmannLM | 12.61 | 5.7716 | 321.05 |
+| TransformerLM (attention) | 17.36 | 5.3858 | 218.28 |
+| GrassmannLM | 17.40 | 5.2997 | 200.29 |
 
-## Visualizations
+### Against paper Table 2 values
 
-### Validation loss over epochs
+| Model | Paper Val PPL | This Reproduction Val PPL | Delta vs Paper |
+|---|---:|---:|---:|
+| TransformerLM | 235.2 | 218.28 | -7.19% |
+| GrassmannLM | 261.1 | 200.29 | -23.29% |
 
-![Validation Loss Curve](training_results_hydra/figures/run_2026-02-23_03-09-29_val_loss_curve.png)
+Relative model gap in this run:
 
-### Best validation metrics
+- Grassmann vs Transformer (PPL): **-8.24%** (Grassmann lower/better)
 
-![Best Metric Comparison](training_results_hydra/figures/run_2026-02-23_03-09-29_best_metrics.png)
+## Visual Graphs
+
+### Validation loss curves
+
+![Validation Loss Curve](training_results_hydra/figures/2026-02-23_14-13-53_val_loss_curve.svg)
+
+### Best validation perplexity comparison
+
+![Best PPL Comparison](training_results_hydra/figures/2026-02-23_14-13-53_best_ppl.svg)
 
 ## Interpretation
 
-- In this full-data 30-epoch run, **Transformer outperformed Grassmann**.
-- Relative to Transformer:
-  - Grassmann best val loss is higher by about **5.41%**
-  - Grassmann best val perplexity is higher by about **34.49%**
-- Attention result (`238.71`) is in the same range as the paper-reported attention number (mid-200s), suggesting the baseline training setup is reasonable.
-- Grassmann underperforms in this reproduction run, so the current implementation/configuration does not replicate a Grassmann advantage here.
+- Both models improve sharply early, then overfit in later epochs; best checkpoints occur early (attention around epoch 10, Grassmann around epoch 4).
+- In this stabilized 12-layer setup, **Grassmann outperforms Transformer** on validation perplexity.
+- This is **not the same ordering** as paper Table 2 (paper reports Transformer better), so exact ranking reproduction is not achieved even though both models are in the same performance regime (low-200s PPL).
+- The ordering flip strongly suggests sensitivity to optimization/normalization details at this scale.
 
 ## Reproduce
 
 ```bash
+# install env (if network/cache available)
 uv sync
 
-# Run both models
+# final Table-2 style run
 uv run python train_hydra.py -m model=attention,grassmann \
-  train.num_epochs=30 train.batch_size=32 train.num_workers=2 \
-  data.max_samples_train=null data.max_samples_val=null
-
-# Build comparison table for this run
-uv run python summarize_results.py \
-  --root training_results_hydra/multirun/2026-02-23/03-09-29 \
-  --out training_results_hydra/comparison_table_2026-02-23_03-09-29.md
-
-# Plot figures for this run
-uv run python plot_hydra_results.py \
-  --results training_results_hydra/multirun/2026-02-23/03-09-29/0_attention/results.json \
-            training_results_hydra/multirun/2026-02-23/03-09-29/1_grassmann/results.json \
-  --tag run_2026-02-23_03-09-29
+  model.num_layers=12 \
+  model.pre_norm=true \
+  data.max_context_len=256 \
+  train.batch_size=16 \
+  model.layerwise_lags=true \
+  model.lags='[1,1,2,2,4,4,8,8,12,12,16,16]' \
+  train.num_epochs=30 \
+  train.learning_rate=0.001 \
+  train.num_workers=0 \
+  data.max_samples_train=null \
+  data.max_samples_val=null
 ```
+
+Key result files:
+
+- `training_results_hydra/multirun/2026-02-23/14-13-53/0_attention/results.json`
+- `training_results_hydra/multirun/2026-02-23/14-13-53/1_grassmann/results.json`

@@ -7,3 +7,4 @@ d_low: 32
 lags: [1, 2, 4, 8, 12, 16]
 pre_norm: false
 weight_tying: true
+layerwise_lags: false

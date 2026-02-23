@@ -85,6 +85,7 @@ def create_model(vocab_size: int, cfg: DictConfig, device: str):
         weight_tying=cfg.model.weight_tying,
         d_low=cfg.model.d_low,
         pre_norm=cfg.model.pre_norm,
+        layerwise_lags=cfg.model.layerwise_lags,
     )
     model = Transformer(lm_config).to(device)
     return model, lm_config
@@ -94,7 +95,18 @@ def count_parameters(model: nn.Module):
     return sum(p.numel() for p in model.parameters() if p.requires_grad)
 
 
-def train_epoch(model, dataloader, optimizer, scaler, criterion, scheduler, cfg, device):
+def train_epoch(
+    model,
+    dataloader,
+    optimizer,
+    scaler,
+    criterion,
+    scheduler,
+    cfg,
+    device,
+    amp_dtype,
+    use_grad_scaler,
+):
     model.train()
     total_loss = 0.0
     total_tokens = 0
@@ -107,24 +119,29 @@ def train_epoch(model, dataloader, optimizer, scaler, criterion, scheduler, cfg,
         targets = targets.to(device, non_blocking=True)
 
         optimizer.zero_grad(set_to_none=True)
-        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=use_amp):
+        with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
             logits = model(inputs)
             loss = criterion(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
 
-        if use_amp:
+        optimizer_stepped = False
+        if use_amp and use_grad_scaler:
+            prev_scale = scaler.get_scale()
             scaler.scale(loss).backward()
             if cfg.train.grad_clip is not None:
                 scaler.unscale_(optimizer)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.grad_clip)
             scaler.step(optimizer)
             scaler.update()
+            optimizer_stepped = scaler.get_scale() >= prev_scale
         else:
             loss.backward()
             if cfg.train.grad_clip is not None:
                 torch.nn.utils.clip_grad_norm_(model.parameters(), cfg.train.grad_clip)
             optimizer.step()
+            optimizer_stepped = True
 
-        scheduler.step()
+        if optimizer_stepped:
+            scheduler.step()
         total_loss += loss.item()
         total_tokens += targets.numel()
         elapsed = max(time.time() - start, 1e-6)
@@ -137,7 +154,7 @@ def train_epoch(model, dataloader, optimizer, scaler, criterion, scheduler, cfg,
 
 
 @torch.no_grad()
-def evaluate(model, dataloader, criterion, cfg, device):
+def evaluate(model, dataloader, criterion, cfg, device, amp_dtype):
     model.eval()
     total_loss = 0.0
     use_amp = bool(cfg.train.amp and device == "cuda")
@@ -146,7 +163,7 @@ def evaluate(model, dataloader, criterion, cfg, device):
     for inputs, targets in pbar:
         inputs = inputs.to(device, non_blocking=True)
         targets = targets.to(device, non_blocking=True)
-        with torch.autocast(device_type="cuda", dtype=torch.float16, enabled=use_amp):
+        with torch.autocast(device_type="cuda", dtype=amp_dtype, enabled=use_amp):
             logits = model(inputs)
             loss = criterion(logits.reshape(-1, logits.size(-1)), targets.reshape(-1))
         total_loss += loss.item()
@@ -175,7 +192,19 @@ def main(cfg: DictConfig):
     total_steps = len(train_loader) * int(cfg.train.num_epochs)
     scheduler = CosineAnnealingLR(optimizer, T_max=total_steps)
     criterion = nn.CrossEntropyLoss()
-    scaler = torch.amp.GradScaler("cuda", enabled=bool(cfg.train.amp and device == "cuda"))
+    use_amp = bool(cfg.train.amp and device == "cuda")
+    amp_dtype = (
+        torch.bfloat16
+        if use_amp and torch.cuda.is_available() and torch.cuda.is_bf16_supported()
+        else torch.float16
+    )
+    use_grad_scaler = bool(use_amp and amp_dtype == torch.float16)
+    scaler = torch.amp.GradScaler("cuda", enabled=use_grad_scaler)
+    if use_amp:
+        print(
+            f"amp_dtype={str(amp_dtype).replace('torch.', '')} "
+            f"grad_scaler={'on' if use_grad_scaler else 'off'}"
+        )
 
     best_val_loss = float("inf")
     best_val_ppl = float("inf")
@@ -184,9 +213,18 @@ def main(cfg: DictConfig):
 
     for epoch in range(1, int(cfg.train.num_epochs) + 1):
         train_loss = train_epoch(
-            model, train_loader, optimizer, scaler, criterion, scheduler, cfg, device
+            model,
+            train_loader,
+            optimizer,
+            scaler,
+            criterion,
+            scheduler,
+            cfg,
+            device,
+            amp_dtype,
+            use_grad_scaler,
         )
-        val_loss = evaluate(model, val_loader, criterion, cfg, device)
+        val_loss = evaluate(model, val_loader, criterion, cfg, device, amp_dtype)
         train_ppl = float(np.exp(train_loss))
         val_ppl = float(np.exp(val_loss))
         train_losses.append(float(train_loss))

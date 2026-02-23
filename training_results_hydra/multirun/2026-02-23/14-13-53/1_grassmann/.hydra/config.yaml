@@ -1,0 +1,46 @@
+model:
+  tensor_lifting_strategy: grassmann
+  num_layers: 12
+  d_model: 256
+  num_heads: 4
+  expansion_ratio: 4
+  d_low: 32
+  lags:
+  - 1
+  - 1
+  - 2
+  - 2
+  - 4
+  - 4
+  - 8
+  - 8
+  - 12
+  - 12
+  - 16
+  - 16
+  pre_norm: true
+  weight_tying: true
+  layerwise_lags: true
+data:
+  source: local_parquet
+  data_root: /tmp/wikitext2_official/wikitext-2-raw-v1
+  tokenizer_name: bert-base-uncased
+  max_context_len: 256
+  max_samples_train: null
+  max_samples_val: null
+seed: 42
+train:
+  device: cuda
+  batch_size: 16
+  num_epochs: 30
+  learning_rate: 0.001
+  weight_decay: 0.01
+  grad_clip: 1.0
+  dropout_rate: 0.1
+  num_workers: 0
+  pin_memory: true
+  amp: true
+experiment:
+  name: paper_6l_128
+  run_id: null
+  output_root: training_results_hydra
