@@ -3,6 +3,7 @@
 This project reproduces and stress-tests the language modeling setup from:
 
 **Attention Is Not What You Need: Grassmann Flows as an Attention-Free Alternative for Sequence Modeling** (arXiv: `2512.19428`)
+Paper URL: https://arxiv.org/abs/2512.19428
 
 The goal is to implement the Grassmann block at code level, run matched experiments against a Transformer baseline, and report results with transparent training curves and interpretation.
 
