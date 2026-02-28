@@ -61,6 +61,23 @@ Relative model gap in this run:
 
 - Grassmann vs Transformer (PPL): **-8.24%** (Grassmann lower/better)
 
+### Strict paper-like run (no stabilization switches)
+
+To verify strict reproducibility, we also ran the same 12-layer/256/30 setup with:
+
+- `model.pre_norm=false`
+- `model.use_custom_init=false`
+- all other core settings matched
+
+Run tag: `2026-02-27/20-23-53`
+
+| Model | Best Val PPL (Strict) |
+|---|---:|
+| TransformerLM (attention) | 1381.35 |
+| GrassmannLM | 290.60 |
+
+This strict run does **not** reproduce Table 2-level performance.
+
 ## Visual Graphs
 
 ### Validation loss curves
@@ -77,6 +94,16 @@ Relative model gap in this run:
 - In this stabilized 12-layer setup, **Grassmann outperforms Transformer** on validation perplexity.
 - This is **not the same ordering** as paper Table 2 (paper reports Transformer better), so exact ranking reproduction is not achieved even though both models are in the same performance regime (low-200s PPL).
 - The ordering flip strongly suggests sensitivity to optimization/normalization details at this scale.
+
+### Why strict reproduction fails here
+
+The failure is driven by optimization stability at depth 12:
+
+- With strict defaults (`pre_norm=false`, no small-std init), the initial logits/loss scale is extremely large (e.g., attention init loss `~120`, logits abs max `~168`), which causes unstable training dynamics.
+- Enabling small-std initialization (`N(0, 0.02)`) collapses initial scale to a normal range (init loss `~10`, logits abs max `~4`).
+- `pre_norm=true` further improves early-step behavior at 12 layers.
+
+In short: strict configuration in this implementation/environment is numerically unstable for attention, and that instability dominates the final mismatch.
 
 ## Reproduce
 
@@ -103,3 +130,5 @@ Key result files:
 
 - `training_results_hydra/multirun/2026-02-23/14-13-53/0_attention/results.json`
 - `training_results_hydra/multirun/2026-02-23/14-13-53/1_grassmann/results.json`
+- `training_results_hydra/multirun/2026-02-27/20-23-53/0_attention/results.json` (strict)
+- `training_results_hydra/multirun/2026-02-27/20-23-53/1_grassmann/results.json` (strict)

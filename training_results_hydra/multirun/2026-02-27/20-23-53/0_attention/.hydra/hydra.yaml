@@ -1,0 +1,171 @@
+hydra:
+  run:
+    dir: ${experiment.output_root}/single/${now:%Y-%m-%d}/${now:%H-%M-%S}_${model.tensor_lifting_strategy}
+  sweep:
+    dir: ${experiment.output_root}/multirun/${now:%Y-%m-%d}/${now:%H-%M-%S}
+    subdir: ${hydra.job.num}_${model.tensor_lifting_strategy}
+  launcher:
+    _target_: hydra._internal.core_plugins.basic_launcher.BasicLauncher
+  sweeper:
+    _target_: hydra._internal.core_plugins.basic_sweeper.BasicSweeper
+    max_batch_size: null
+    params: null
+  help:
+    app_name: ${hydra.job.name}
+    header: '${hydra.help.app_name} is powered by Hydra.
+
+      '
+    footer: 'Powered by Hydra (https://hydra.cc)
+
+      Use --hydra-help to view Hydra specific help
+
+      '
+    template: '${hydra.help.header}
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (group=option)
+
+
+      $APP_CONFIG_GROUPS
+
+
+      == Config ==
+
+      Override anything in the config (foo.bar=value)
+
+
+      $CONFIG
+
+
+      ${hydra.help.footer}
+
+      '
+  hydra_help:
+    template: 'Hydra (${hydra.runtime.version})
+
+      See https://hydra.cc for more info.
+
+
+      == Flags ==
+
+      $FLAGS_HELP
+
+
+      == Configuration groups ==
+
+      Compose your configuration from those groups (For example, append hydra/job_logging=disabled
+      to command line)
+
+
+      $HYDRA_CONFIG_GROUPS
+
+
+      Use ''--cfg hydra'' to Show the Hydra config.
+
+      '
+    hydra_help: ???
+  hydra_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][HYDRA] %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+    root:
+      level: INFO
+      handlers:
+      - console
+    loggers:
+      logging_example:
+        level: DEBUG
+    disable_existing_loggers: false
+  job_logging:
+    version: 1
+    formatters:
+      simple:
+        format: '[%(asctime)s][%(name)s][%(levelname)s] - %(message)s'
+    handlers:
+      console:
+        class: logging.StreamHandler
+        formatter: simple
+        stream: ext://sys.stdout
+      file:
+        class: logging.FileHandler
+        formatter: simple
+        filename: ${hydra.runtime.output_dir}/${hydra.job.name}.log
+    root:
+      level: INFO
+      handlers:
+      - console
+      - file
+    disable_existing_loggers: false
+  env: {}
+  mode: MULTIRUN
+  searchpath: []
+  callbacks: {}
+  output_subdir: .hydra
+  overrides:
+    hydra:
+    - hydra.mode=MULTIRUN
+    task:
+    - model=attention
+    - model.num_layers=12
+    - model.pre_norm=False
+    - model.use_custom_init=False
+    - data.max_context_len=256
+    - train.device=cuda
+    - train.batch_size=16
+    - model.layerwise_lags=True
+    - model.lags=[1,1,2,2,4,4,8,8,12,12,16,16]
+    - train.num_epochs=30
+    - train.learning_rate=0.001
+    - train.num_workers=0
+    - data.data_root=/tmp/wikitext2_official/wikitext-2-raw-v1
+    - data.max_samples_train=null
+    - data.max_samples_val=null
+  job:
+    name: train_hydra
+    chdir: null
+    override_dirname: data.data_root=/tmp/wikitext2_official/wikitext-2-raw-v1,data.max_context_len=256,data.max_samples_train=null,data.max_samples_val=null,model.lags=[1,1,2,2,4,4,8,8,12,12,16,16],model.layerwise_lags=True,model.num_layers=12,model.pre_norm=False,model.use_custom_init=False,model=attention,train.batch_size=16,train.device=cuda,train.learning_rate=0.001,train.num_epochs=30,train.num_workers=0
+    id: '0'
+    num: 0
+    config_name: config
+    env_set: {}
+    env_copy: []
+    config:
+      override_dirname:
+        kv_sep: '='
+        item_sep: ','
+        exclude_keys: []
+  runtime:
+    version: 1.3.2
+    version_base: '1.3'
+    cwd: /tmp/grassmann-exp
+    config_sources:
+    - path: hydra.conf
+      schema: pkg
+      provider: hydra
+    - path: /tmp/grassmann-exp/conf
+      schema: file
+      provider: main
+    - path: ''
+      schema: structured
+      provider: schema
+    output_dir: /tmp/grassmann-exp/training_results_hydra/multirun/2026-02-27/20-23-53/0_attention
+    choices:
+      data: wikitext2_local
+      model: attention
+      hydra/env: default
+      hydra/callbacks: null
+      hydra/job_logging: default
+      hydra/hydra_logging: default
+      hydra/hydra_help: default
+      hydra/help: default
+      hydra/sweeper: basic
+      hydra/launcher: basic
+      hydra/output: default
+  verbose: false
